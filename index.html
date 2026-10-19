@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventário Família Miranda</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Arial, sans-serif; margin:0; padding:16px; background:#f4f4f4; }
+  h1 { font-size:20px; }
+  .card { background:#fff; border-radius:10px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1); }
+  input, select, button { width:100%; padding:10px; margin:6px 0; border-radius:6px; border:1px solid #ccc; font-size:15px; }
+  button { background:#2563eb; color:#fff; border:none; font-weight:bold; cursor:pointer; }
+  button.secondary { background:#6b7280; }
+  button.danger { background:#dc2626; }
+  .tabs { display:flex; gap:8px; margin-bottom:16px; }
+  .tabs button { background:#e5e7eb; color:#111; flex:1; }
+  .tabs button.active { background:#2563eb; color:#fff; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 4px; border-bottom:1px solid #eee; }
+  .low { background:#fef3c7; }
+  .expiring { background:#fee2e2; }
+  .hidden { display:none; }
+  #reader { width:100%; }
+  .badge { font-size:11px; padding:2px 6px; border-radius:4px; background:#e5e7eb; }
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="card">
+  <h1>🔐 Inventário Família Miranda</h1>
+  <input type="email" id="email" placeholder="E-mail">
+  <input type="password" id="senha" placeholder="Senha">
+  <button onclick="fazerLogin()">Entrar</button>
+  <p id="login-erro" style="color:red; font-size:13px;"></p>
+</div>
+
+<div id="app" class="hidden">
+  <h1>📦 Inventário Família Miranda</h1>
+  <button class="secondary" onclick="sair()">Sair</button>
+
+  <div class="tabs">
+    <button id="tab-inv" class="active" onclick="mostrarAba('inv')">Inventário</button>
+    <button id="tab-scan" onclick="mostrarAba('scan')">Bipar</button>
+    <button id="tab-shop" onclick="mostrarAba('shop')">Compras</button>
+  </div>
+
+  <div id="aba-inv">
+    <div class="card">
+      <h3>Adicionar manualmente</h3>
+      <input id="f-nome" placeholder="Nome do item">
+      <select id="f-cat">
+        <option value="Agua">Água</option>
+        <option value="Alimento">Alimento</option>
+        <option value="BOB">B.O.B.</option>
+        <option value="BOV">B.O.V.</option>
+        <option value="Armamento">Armamento</option>
+        <option value="Arco">Arco e Flechas</option>
+      </select>
+      <input id="f-qtd" type="number" step="0.1" placeholder="Quantidade">
+      <input id="f-unid" placeholder="Unidade (un, kg, L)">
+      <input id="f-min" type="number" step="0.1" placeholder="Quantidade mínima">
+      <input id="f-val" type="date" placeholder="Validade">
+      <button onclick="adicionarItem()">Adicionar</button>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr><th>Item</th><th>Qtd</th><th>Validade</th><th></th></tr></thead>
+        <tbody id="lista-inventario"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="aba-scan" class="hidden">
+    <div class="card">
+      <h3>Aponte a câmera para o código de barras</h3>
+      <div id="reader"></div>
+      <p id="scan-resultado"></p>
+    </div>
+  </div>
+
+  <div id="aba-shop" class="hidden">
+    <div class="card">
+      <input id="f-shop" placeholder="Adicionar item à lista">
+      <button onclick="adicionarCompra()">Adicionar</button>
+      <button class="secondary" onclick="puxarFaltantes()">Puxar itens em falta</button>
+      <div id="lista-compras"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== CONFIGURAÇÃO DO SEU FIREBASE (já preenchida) =====
+const firebaseConfig = {
+  apiKey: "AIzaSyDoN37kvT8zJ9u5GTkd3uQ-4Y7dmLOSSHM",
+  authDomain: "inventario-familia-980db.firebaseapp.com",
+  projectId: "inventario-familia-980db",
+  storageBucket: "inventario-familia-980db.firebasestorage.app",
+  messagingSenderId: "843353094115",
+  appId: "1:843353094115:web:666a964d9d931602fc92d6"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ===== LOGIN =====
+function fazerLogin() {
+  const email = document.getElementById('email').value;
+  const senha = document.getElementById('senha').value;
+  auth.signInWithEmailAndPassword(email, senha)
+    .catch(err => document.getElementById('login-erro').innerText = "Erro: " + err.message);
+}
+function sair() { auth.signOut(); }
+
+auth.onAuthStateChanged(user => {
+  if (user) {
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    carregarInventario();
+    carregarCompras();
+  } else {
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('app').classList.add('hidden');
+  }
+});
+
+// ===== ABAS =====
+function mostrarAba(aba) {
+  ['inv','scan','shop'].forEach(a => {
+    document.getElementById('aba-'+a).classList.toggle('hidden', a !== aba);
+    document.getElementById('tab-'+a).classList.toggle('active', a === aba);
+  });
+  if (aba === 'scan') iniciarScanner();
+  else pararScanner();
+}
+
+// ===== INVENTÁRIO =====
+function adicionarItem() {
+  const item = {
+    nome: document.getElementById('f-nome').value,
+    categoria: document.getElementById('f-cat').value,
+    quantidade: parseFloat(document.getElementById('f-qtd').value) || 0,
+    unidade: document.getElementById('f-unid').value || 'un',
+    quantidadeMinima: parseFloat(document.getElementById('f-min').value) || 1,
+    validade: document.getElementById('f-val').value || null,
+    atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  if (!item.nome) return;
+  db.collection('inventario').add(item);
+  ['f-nome','f-qtd','f-unid','f-min','f-val'].forEach(id => document.getElementById(id).value = '');
+}
+
+function carregarInventario() {
+  db.collection('inventario').onSnapshot(snap => {
+    const tbody = document.getElementById('lista-inventario');
+    tbody.innerHTML = '';
+    snap.forEach(doc => {
+      const d = doc.data();
+      const tr = document.createElement('tr');
+      let diasVal = null;
+      if (d.validade) {
+        diasVal = Math.round((new Date(d.validade) - new Date()) / 86400000);
+      }
+      if (diasVal !== null && diasVal <= 30) tr.classList.add('expiring');
+      else if (d.quantidade < 1) tr.classList.add('low');
+
+      tr.innerHTML = `
+        <td>${d.nome}<br><span class="badge">${d.categoria}</span></td>
+        <td>${d.quantidade} ${d.unidade}</td>
+        <td>${d.validade ? d.validade.split('-').reverse().join('/') : '-'}</td>
+        <td></td>
+      `;
+      const btnDel = document.createElement('button');
+      btnDel.className = 'danger';
+      btnDel.innerText = 'X';
+      btnDel.style.width = 'auto';
+      btnDel.onclick = () => db.collection('inventario').doc(doc.id).delete();
+      tr.lastElementChild.appendChild(btnDel);
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+// ===== SCANNER DE CÓDIGO DE BARRAS =====
+let scanner = null;
+function iniciarScanner() {
+  if (scanner) return;
+  scanner = new Html5Qrcode("reader");
+  scanner.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+    codigoLido => {
+      document.getElementById('scan-resultado').innerText = "Código lido: " + codigoLido;
+      buscarProdutoPorCodigo(codigoLido);
+      pararScanner();
+      mostrarAba('inv');
+    }
+  ).catch(err => console.log(err));
+}
+function pararScanner() {
+  if (scanner) { scanner.stop().catch(()=>{}); scanner = null; }
+}
+
+async function buscarProdutoPorCodigo(codigo) {
+  try {
+    const resp = await fetch(`https://world.openfoodfacts.org/api/v0/product/${codigo}.json`);
+    const data = await resp.json();
+    if (data.status === 1) {
+      document.getElementById('f-nome').value = data.product.product_name || 'Produto sem nome';
+    } else {
+      document.getElementById('f-nome').value = '';
+    }
+  } catch(e) {
+    document.getElementById('f-nome').value = '';
+  }
+  document.getElementById('f-qtd').value = 1;
+}
+
+// ===== LISTA DE COMPRAS =====
+function adicionarCompra() {
+  const texto = document.getElementById('f-shop').value;
+  if (!texto) return;
+  db.collection('lista_compras').add({ nome: texto, comprado: false });
+  document.getElementById('f-shop').value = '';
+}
+
+function carregarCompras() {
+  db.collection('lista_compras').onSnapshot(snap => {
+    const div = document.getElementById('lista-compras');
+    div.innerHTML = '';
+    snap.forEach(doc => {
+      const d = doc.data();
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.gap = '8px';
+      row.style.padding = '6px 0';
+      row.innerHTML = `
+        <input type="checkbox" ${d.comprado ? 'checked' : ''} style="width:20px;">
+        <span style="flex:1; ${d.comprado ? 'text-decoration:line-through;color:#999;' : ''}">${d.nome}</span>
+      `;
+      row.querySelector('input').onchange = (e) => {
+        db.collection('lista_compras').doc(doc.id).update({ comprado: e.target.checked });
+      };
+      const btnDel = document.createElement('button');
+      btnDel.innerText = 'X';
+      btnDel.className = 'danger';
+      btnDel.style.width = 'auto';
+      btnDel.onclick = () => db.collection('lista_compras').doc(doc.id).delete();
+      row.appendChild(btnDel);
+      div.appendChild(row);
+    });
+  });
+}
+
+function puxarFaltantes() {
+  db.collection('inventario').get().then(snap => {
+    snap.forEach(doc => {
+      const d = doc.data();
+      if (d.quantidade < 1) {
+        db.collection('lista_compras').add({ nome: d.nome, comprado: false });
+      }
+    });
+  });
+}
+</script>
+</body>
+</html>
