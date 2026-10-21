@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventário Família Miranda</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Arial, sans-serif; margin:0; padding:16px; background:#121212; color:#e5e5e5; }
+  h1 { font-size:20px; color:#fff; }
+  h3 { font-size:15px; margin-top:0; color:#fff; }
+  h4 { font-size:13px; margin:12px 0 4px; color:#aaa; text-transform:uppercase; letter-spacing:0.5px; }
+  .card { background:#1e1e1e; border-radius:10px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,0.4); border:1px solid #2a2a2a; }
+  input, select, button { width:100%; padding:10px; margin:6px 0; border-radius:6px; border:1px solid #333; font-size:15px; background:#2a2a2a; color:#fff; }
+  input::placeholder { color:#888; }
+  button { background:#dc2626; color:#fff; border:none; font-weight:bold; cursor:pointer; }
+  button.secondary { background:#4b5563; }
+  button.danger { background:#991b1b; }
+  button.success { background:#15803d; }
+  button.cart { background:#9a6b00; }
+  button.pdf { background:#1d4ed8; }
+  button.edit { background:#0891b2; }
+  .row-btns { display:flex; justify-content:space-between; gap:8px; }
+  .row-btns button { width:100%; margin:0; }
+  .tabs { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; }
+  .tabs button { background:#2a2a2a; color:#ccc; flex:1; min-width:70px; font-size:13px; padding:10px 4px; position:relative; }
+  .tabs button.active { background:#dc2626; color:#fff; }
+  .tab-count { position:absolute; top:-6px; right:-6px; background:#eab308; color:#000; font-size:10px; font-weight:bold; border-radius:50%; width:18px; height:18px; display:flex; align-items:center; justify-content:center; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 4px; border-bottom:1px solid #2a2a2a; }
+  th { color:#888; }
+  .low { background:#3a2e0d; }
+  .expiring { background:#3a1414; }
+  .hidden { display:none; }
+  #reader { width:100%; }
+  .badge { font-size:11px; padding:2px 6px; border-radius:4px; background:#333; color:#ccc; margin-right:4px; display:inline-block; }
+  .nivel-inicial { background:#7f1d1d; color:#fecaca; }
+  .nivel-intermediaria { background:#713f12; color:#fde68a; }
+  .nivel-avancada { background:#14532d; color:#bbf7d0; }
+  .scan-item-card { border:2px solid #dc2626; border-radius:8px; padding:12px; margin-top:12px; background:#1e1e1e; }
+  .scan-qtd-display { font-size:28px; font-weight:bold; text-align:center; margin:8px 0; color:#fff; }
+  .logo-header { text-align:center; margin-bottom:16px; }
+  .logo-header img { width:140px; height:140px; border-radius:50%; object-fit:cover; object-position:center; }
+  .tab-banner { width:100%; max-width:280px; display:block; margin:0 auto 16px; border-radius:8px; }
+  .destino-btns { display:flex; gap:8px; margin:10px 0; }
+  .destino-btns button { flex:1; padding:14px 4px; font-size:14px; }
+  .acoes-item { display:flex; gap:4px; }
+  .acoes-item button { width:auto; padding:4px 8px; margin:0; font-size:12px; }
+  .search-row { display:flex; gap:8px; }
+  .offline-banner { background:#92400e; color:#fff; text-align:center; padding:8px; border-radius:6px; margin-bottom:12px; font-size:13px; }
+  .toast { position:fixed; bottom:16px; left:16px; right:16px; background:#1e1e1e; border:1px solid #444; border-radius:8px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; z-index:999; box-shadow:0 4px 12px rgba(0,0,0,0.5); }
+  .toast button { width:auto; background:#2563eb; margin:0; padding:6px 12px; }
+  .meta-secao { border-radius:10px; padding:14px; margin-bottom:14px; }
+  .meta-inicial { background:#2a1414; border:1px solid #7f1d1d; }
+  .meta-intermediaria { background:#2a2110; border:1px solid #713f12; }
+  .meta-avancada { background:#10231a; border:1px solid #14532d; }
+  .meta-categoria { background:#1a1a2e; border:1px solid #333; }
+  .meta-titulo { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .progress-bar-bg { background:#333; border-radius:6px; height:10px; overflow:hidden; margin-bottom:10px; }
+  .progress-bar-fill { height:100%; transition:width 0.3s; }
+  .meta-item-row { display:flex; align-items:flex-start; gap:8px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:13px; }
+  .meta-item-row input { width:auto; margin:2px 0 0; }
+  .meta-item-row.feito span { text-decoration:line-through; color:#777; }
+  .campos-arma { border:1px dashed #555; border-radius:8px; padding:10px; margin:6px 0; }
+  .toggle-view { display:flex; gap:8px; margin-bottom:14px; }
+  .toggle-view button { flex:1; background:#2a2a2a; color:#ccc; }
+  .toggle-view button.active { background:#2563eb; color:#fff; }
+</style>
+</head>
+<body>
+
+<div id="offline-banner" class="offline-banner hidden">📡 Sem conexão — mostrando últimos dados salvos</div>
+
+<div id="login-screen" class="card">
+  <div class="logo-header"><img src="logo.png" alt="Sobrevivente Preparado"></div>
+  <h1 style="text-align:center;">Inventário Família Miranda</h1>
+  <input type="email" id="email" placeholder="E-mail">
+  <input type="password" id="senha" placeholder="Senha">
+  <button onclick="fazerLogin()">Entrar</button>
+  <p id="login-erro" style="color:#f87171; font-size:13px;"></p>
+</div>
+
+<div id="app" class="hidden">
+  <div class="logo-header"><img src="logo.png" alt="Sobrevivente Preparado"></div>
+  <button class="secondary" onclick="sair()">Sair</button>
+
+  <div class="tabs">
+    <button id="tab-inv" class="active" onclick="mostrarAba('inv')">Inventário<span id="badge-inv" class="tab-count hidden">0</span></button>
+    <button id="tab-scan" onclick="mostrarAba('scan')">Bipar</button>
+    <button id="tab-shop" onclick="mostrarAba('shop')">Compras<span id="badge-shop" class="tab-count hidden">0</span></button>
+    <button id="tab-lista" onclick="mostrarAba('lista')">Planilha</button>
+    <button id="tab-metas" onclick="mostrarAba('metas')">Metas</button>
+  </div>
+
+  <div id="aba-inv">
+    <img src="inventario.png" alt="Have a knives day" class="tab-banner">
+    <div class="card">
+      <h3 id="form-titulo">Adicionar manualmente</h3>
+      <input id="f-nome" placeholder="Nome do item">
+      <input id="f-codigo" placeholder="Código de barras (opcional)">
+      <select id="f-cat" onchange="toggleCamposArma('f-cat','campos-arma-principal')">
+        <option value="Agua">Água</option>
+        <option value="Alimento">Alimento</option>
+        <option value="BOB">B.O.B.</option>
+        <option value="BOV">B.O.V.</option>
+        <option value="Armamento">Armamento</option>
+        <option value="Arco">Arco e Flechas</option>
+        <option value="HigieneGeral">Higiene Geral</option>
+        <option value="HigienePessoal">Higiene Pessoal</option>
+      </select>
+
+      <div id="campos-arma-principal" class="campos-arma hidden">
+        <select id="f-tipo-arma">
+          <option value="">Tipo de arma</option>
+          <option value="Revolver">Revólver</option>
+          <option value="Pistola">Pistola</option>
+          <option value="Carabina">Carabina</option>
+          <option value="Rifle">Rifle</option>
+          <option value="Fuzil">Fuzil</option>
+        </select>
+        <select id="f-calibre">
+          <option value="">Calibre</option>
+          <option value=".22 LR">.22 LR</option>
+          <option value=".25 ACP">.25 ACP</option>
+          <option value=".32 ACP">.32 ACP</option>
+          <option value=".380 ACP">.380 ACP</option>
+          <option value="9mm Luger">9mm Luger</option>
+          <option value=".38 SPL">.38 SPL</option>
+          <option value=".357 Magnum">.357 Magnum</option>
+          <option value=".40 S&W">.40 S&W</option>
+          <option value=".44 Magnum">.44 Magnum</option>
+          <option value=".45 ACP">.45 ACP</option>
+          <option value=".50 AE">.50 AE</option>
+          <option value=".223 Rem / 5.56x45">.223 Rem / 5.56x45</option>
+          <option value=".243 Win">.243 Win</option>
+          <option value=".270 Win">.270 Win</option>
+          <option value=".30-30 Win">.30-30 Win</option>
+          <option value=".308 Win / 7.62x51">.308 Win / 7.62x51</option>
+          <option value="7.62x39">7.62x39</option>
+          <option value="7mm Rem Mag">7mm Rem Mag</option>
+          <option value=".30-06 Springfield">.30-06 Springfield</option>
+          <option value=".300 Win Mag">.300 Win Mag</option>
+          <option value=".338 Lapua">.338 Lapua</option>
+          <option value=".50 BMG">.50 BMG</option>
+          <option value="12 Gauge">12 Gauge</option>
+          <option value="20 Gauge">20 Gauge</option>
+          <option value="28 Gauge">28 Gauge</option>
+          <option value=".410 Bore">.410 Bore</option>
+          <option value="Outro">Outro (especificar no nome)</option>
+        </select>
+      </div>
+
+      <select id="f-nivel">
+        <option value="inicial">🔴 Inicial</option>
+        <option value="intermediaria">🟡 Intermediária</option>
+        <option value="avancada">🟢 Avançada</option>
+      </select>
+      <input id="f-qtd" type="number" step="0.1" placeholder="Quantidade">
+      <input id="f-unid" placeholder="Unidade (un, kg, L)">
+      <input id="f-min" type="number" step="0.1" placeholder="Quantidade mínima">
+      <input id="f-val" type="date" placeholder="Validade">
+      <button id="btn-salvar-item" onclick="adicionarItem()">Adicionar</button>
+      <button id="btn-cancelar-edicao" class="secondary hidden" onclick="cancelarEdicao()">Cancelar edição</button>
+    </div>
+    <div class="card">
+      <div class="search-row">
+        <input id="f-busca" placeholder="🔎 Buscar item..." oninput="renderTabelaInventario()">
+        <select id="f-filtro-cat" onchange="renderTabelaInventario()" style="max-width:120px;">
+          <option value="">Categoria</option>
+          <option value="Agua">Água</option>
+          <option value="Alimento">Alimento</option>
+          <option value="BOB">B.O.B.</option>
+          <option value="BOV">B.O.V.</option>
+          <option value="Armamento">Armamento</option>
+          <option value="Arco">Arco e Flechas</option>
+          <option value="HigieneGeral">Higiene Geral</option>
+          <option value="HigienePessoal">Higiene Pessoal</option>
+        </select>
+        <select id="f-filtro-nivel" onchange="renderTabelaInventario()" style="max-width:120px;">
+          <option value="">Nível</option>
+          <option value="inicial">🔴 Inicial</option>
+          <option value="intermediaria">🟡 Intermediária</option>
+          <option value="avancada">🟢 Avançada</option>
+        </select>
+      </div>
+      <button class="pdf" onclick="baixarPDFInventario()">📄 Baixar inventário em PDF</button>
+      <table>
+        <thead><tr><th>Item</th><th>Qtd</th><th>Validade</th><th></th></tr></thead>
+        <tbody id="lista-inventario"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="aba-scan" class="hidden">
+    <div class="card">
+      <h3>Aponte a câmera para o código de barras</h3>
+      <div id="reader"></div>
+      <div id="scan-resultado"></div>
+    </div>
+  </div>
+
+  <div id="aba-shop" class="hidden">
+    <img src="compras.png" alt="Shut up and take my money" class="tab-banner">
+    <div class="card">
+      <input id="f-shop" placeholder="Adicionar item à lista">
+      <select id="f-shop-cat">
+        <option value="">Sem categoria</option>
+        <option value="Agua">Água</option>
+        <option value="Alimento">Alimento</option>
+        <option value="BOB">B.O.B.</option>
+        <option value="BOV">B.O.V.</option>
+        <option value="Armamento">Armamento</option>
+        <option value="Arco">Arco e Flechas</option>
+        <option value="HigieneGeral">Higiene Geral</option>
+        <option value="HigienePessoal">Higiene Pessoal</option>
+      </select>
+      <button onclick="adicionarCompra()">Adicionar</button>
+      <button class="secondary" onclick="puxarFaltantes()">Puxar itens em falta</button>
+      <button class="pdf" onclick="baixarPDFCompras()">📄 Baixar lista de compras em PDF</button>
+      <div id="lista-compras"></div>
+    </div>
+  </div>
+
+  <div id="aba-lista" class="hidden">
+    <div class="card">
+      <h3>📋 Planilha simples — nome e quantidade</h3>
+      <table>
+        <thead><tr><th>Produto</th><th>Quantidade</th></tr></thead>
+        <tbody id="lista-planilha"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="aba-metas" class="hidden">
+    <div class="card">
+      <h3>🎯 Checklist de Preparação</h3>
+      <p style="font-size:12px; color:#999; margin-bottom:10px;">Marque o que você já tem — o progresso é salvo automaticamente.</p>
+      <div class="toggle-view">
+        <button id="btn-view-nivel" class="active" onclick="mudarVisaoMetas('nivel')">Por Nível</button>
+        <button id="btn-view-categoria" onclick="mudarVisaoMetas('categoria')">Por Categoria</button>
+      </div>
+    </div>
+    <div id="metas-container"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDoN37kvT8zJ9u5GTkd3uQ-4Y7dmLOSSHM",
+  authDomain: "inventario-familia-980db.firebaseapp.com",
+  projectId: "inventario-familia-980db",
+  storageBucket: "inventario-familia-980db.firebasestorage.app",
+  messagingSenderId: "843353094115",
+  appId: "1:843353094115:web:666a964d9d931602fc92d6"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+db.enablePersistence().catch(err => console.log('Persistência offline:', err.code));
+
+let inventarioCache = [];
+let comprasCache = [];
+let itemEditando = null;
+let toastTimer = null;
+let metasConcluidas = {};
+let visaoMetas = 'nivel';
+
+// Cada item de meta agora tem: texto, nivel, categoria
+const METAS_ITENS = [
+  { texto: 'Água potável — 3L/pessoa/dia por 7 dias', nivel: 'inicial', categoria: 'Agua' },
+  { texto: 'Alimentos prontos/enlatados para 7 dias', nivel: 'inicial', categoria: 'Alimento' },
+  { texto: 'Barras de cereal/proteína (10 un)', nivel: 'inicial', categoria: 'Alimento' },
+  { texto: 'Mochila B.O.B. básica por pessoa', nivel: 'inicial', categoria: 'BOB' },
+  { texto: 'Kit de primeiros socorros básico', nivel: 'inicial', categoria: 'Saude' },
+  { texto: 'Rádio a pilha + pilhas extras', nivel: 'inicial', categoria: 'Energia' },
+  { texto: 'Lanterna + pilhas extras', nivel: 'inicial', categoria: 'Energia' },
+  { texto: 'Cópias plastificadas de documentos', nivel: 'inicial', categoria: 'Documentos' },
+  { texto: 'Canivete multiuso', nivel: 'inicial', categoria: 'Ferramentas' },
+  { texto: 'Manta térmica', nivel: 'inicial', categoria: 'BOB' },
+  { texto: 'Sabonete, escova de dente, papel higiênico', nivel: 'inicial', categoria: 'HigienePessoal' },
+
+  { texto: 'Reserva de água para 30 dias', nivel: 'intermediaria', categoria: 'Agua' },
+  { texto: 'Filtro/purificador de água portátil', nivel: 'intermediaria', categoria: 'Agua' },
+  { texto: 'Arroz, feijão, macarrão (1kg/pessoa/semana)', nivel: 'intermediaria', categoria: 'Alimento' },
+  { texto: 'Óleo, sal, açúcar (estoque mensal)', nivel: 'intermediaria', categoria: 'Alimento' },
+  { texto: 'Combustível reserva (20-40L)', nivel: 'intermediaria', categoria: 'BOV' },
+  { texto: 'Powerbank solar ou gerador pequeno', nivel: 'intermediaria', categoria: 'Energia' },
+  { texto: 'Arma de fogo registrada + munição', nivel: 'intermediaria', categoria: 'Armamento' },
+  { texto: 'Reserva de medicamentos de uso contínuo (30 dias)', nivel: 'intermediaria', categoria: 'Saude' },
+  { texto: 'Kit de ferramentas gerais', nivel: 'intermediaria', categoria: 'Ferramentas' },
+  { texto: 'Sabão, desinfetante, álcool', nivel: 'intermediaria', categoria: 'HigieneGeral' },
+
+  { texto: 'Cisterna, poço ou grande reserva de água (90+ dias)', nivel: 'avancada', categoria: 'Agua' },
+  { texto: 'Estoque de alimentos de longa duração (90 dias)', nivel: 'avancada', categoria: 'Alimento' },
+  { texto: 'Sementes e horta própria', nivel: 'avancada', categoria: 'Alimento' },
+  { texto: 'Arco recurvo 22lbs completo', nivel: 'avancada', categoria: 'Arco' },
+  { texto: 'Arco composto 80lbs completo', nivel: 'avancada', categoria: 'Arco' },
+  { texto: 'Flechas e pontas (caça e prática)', nivel: 'avancada', categoria: 'Arco' },
+  { texto: 'Reserva de munição ampliada', nivel: 'avancada', categoria: 'Armamento' },
+  { texto: 'Painel solar + banco de baterias', nivel: 'avancada', categoria: 'Energia' },
+  { texto: 'Kit de saúde avançado (sutura, imobilização)', nivel: 'avancada', categoria: 'Saude' },
+  { texto: 'Sistema de vigilância/perímetro', nivel: 'avancada', categoria: 'Seguranca' },
+  { texto: 'Reserva ampliada de higiene pessoal e geral (90 dias)', nivel: 'avancada', categoria: 'HigienePessoal' }
+];
+
+const NIVEL_LABEL = { inicial: '🔴 Inicial', intermediaria: '🟡 Intermediária', avancada: '🟢 Avançada' };
+const NIVEL_COR = { inicial: '#dc2626', intermediaria: '#eab308', avancada: '#16a34a' };
+const CATEGORIA_LABEL = {
+  Agua: '💧 Água', Alimento: '🍽️ Alimento', BOB: '🎒 B.O.B.', BOV: '🚙 B.O.V.',
+  Armamento: '🔫 Armamento', Arco: '🏹 Arco e Flechas',
+  HigieneGeral: '🧼 Higiene Geral', HigienePessoal: '🧴 Higiene Pessoal',
+  Saude: '🩹 Saúde', Energia: '🔋 Energia', Ferramentas: '🛠️ Ferramentas',
+  Documentos: '📄 Documentos', Seguranca: '🛡️ Segurança'
+};
+
+function atualizarStatusConexao() {
+  document.getElementById('offline-banner').classList.toggle('hidden', navigator.onLine);
+}
+window.addEventListener('online', atualizarStatusConexao);
+window.addEventListener('offline', atualizarStatusConexao);
+atualizarStatusConexao();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+
+function mostrarToast(mensagem, onUndo) {
+  clearTimeout(toastTimer);
+  const toast = document.getElementById('toast');
+  toast.innerHTML = `<span>${mensagem}</span>`;
+  if (onUndo) {
+    const btn = document.createElement('button');
+    btn.innerText = 'Desfazer';
+    btn.onclick = () => { onUndo(); toast.classList.add('hidden'); clearTimeout(toastTimer); };
+    toast.appendChild(btn);
+  }
+  toast.classList.remove('hidden');
+  toastTimer = setTimeout(() => toast.classList.add('hidden'), 5000);
+}
+
+function fazerLogin() {
+  const email = document.getElementById('email').value;
+  const senha = document.getElementById('senha').value;
+  auth.signInWithEmailAndPassword(email, senha)
+    .catch(err => document.getElementById('login-erro').innerText = "Erro: " + err.message);
+}
+function sair() { auth.signOut(); }
+
+auth.onAuthStateChanged(user => {
+  if (user) {
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    carregarInventario();
+    carregarCompras();
+    carregarMetas();
+  } else {
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('app').classList.add('hidden');
+  }
+});
+
+function mostrarAba(aba) {
+  ['inv','scan','shop','lista','metas'].forEach(a => {
+    document.getElementById('aba-'+a).classList.toggle('hidden', a !== aba);
+    document.getElementById('tab-'+a).classList.toggle('active', a === aba);
+  });
+  if (aba === 'scan') {
+    iniciarScanner();
+    document.getElementById('scan-resultado').innerHTML = '';
+  } else {
+    pararScanner();
+  }
+}
+
+function toggleCamposArma(selectId, camposId) {
+  const valor = document.getElementById(selectId).value;
+  document.getElementById(camposId).classList.toggle('hidden', valor !== 'Armamento');
+}
+
+function adicionarItem() {
+  const categoria = document.getElementById('f-cat').value;
+  const item = {
+    nome: document.getElementById('f-nome').value,
+    codigoBarras: document.getElementById('f-codigo').value || null,
+    categoria: categoria,
+    tipoArma: categoria === 'Armamento' ? (document.getElementById('f-tipo-arma').value || null) : null,
+    calibre: categoria === 'Armamento' ? (document.getElementById('f-calibre').value || null) : null,
+    nivel: document.getElementById('f-nivel').value,
+    quantidade: parseFloat(document.getElementById('f-qtd').value) || 0,
+    unidade: document.getElementById('f-unid').value || 'un',
+    quantidadeMinima: parseFloat(document.getElementById('f-min').value) || 1,
+    validade: document.getElementById('f-val').value || null,
+    atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  if (!item.nome) return;
+
+  if (itemEditando) {
+    db.collection('inventario').doc(itemEditando).update(item);
+    cancelarEdicao();
+  } else {
+    db.collection('inventario').add(item);
+    limparFormulario();
+  }
+}
+
+function limparFormulario() {
+  ['f-nome','f-codigo','f-qtd','f-unid','f-min','f-val'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-nivel').value = 'inicial';
+  document.getElementById('f-tipo-arma').value = '';
+  document.getElementById('f-calibre').value = '';
+  document.getElementById('campos-arma-principal').classList.add('hidden');
+}
+
+function editarItem(d) {
+  itemEditando = d.id;
+  document.getElementById('f-nome').value = d.nome;
+  document.getElementById('f-codigo').value = d.codigoBarras || '';
+  document.getElementById('f-cat').value = d.categoria;
+  document.getElementById('f-nivel').value = d.nivel || 'inicial';
+  document.getElementById('f-qtd').value = d.quantidade;
+  document.getElementById('f-unid').value = d.unidade;
+  document.getElementById('f-min').value = d.quantidadeMinima;
+  document.getElementById('f-val').value = d.validade || '';
+  document.getElementById('f-tipo-arma').value = d.tipoArma || '';
+  document.getElementById('f-calibre').value = d.calibre || '';
+  toggleCamposArma('f-cat','campos-arma-principal');
+  document.getElementById('form-titulo').innerText = 'Editando: ' + d.nome;
+  document.getElementById('btn-salvar-item').innerText = 'Salvar edição';
+  document.getElementById('btn-cancelar-edicao').classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cancelarEdicao() {
+  itemEditando = null;
+  limparFormulario();
+  document.getElementById('form-titulo').innerText = 'Adicionar manualmente';
+  document.getElementById('btn-salvar-item').innerText = 'Adicionar';
+  document.getElementById('btn-cancelar-edicao').classList.add('hidden');
+}
+
+function enviarParaCompras(nome, categoria) {
+  db.collection('lista_compras').add({ nome: nome, categoria: categoria || null, comprado: false });
+  mostrarToast('"' + nome + '" adicionado à lista de compras');
+}
+
+function excluirItem(d) {
+  if (!confirm('Excluir "' + d.nome + '" do inventário?')) return;
+  const backup = { ...d };
+  delete backup.id;
+  db.collection('inventario').doc(d.id).delete();
+  mostrarToast('Item excluído: ' + d.nome, () => { db.collection('inventario').add(backup); });
+}
+
+function rotuloNivel(nivel) {
+  if (nivel === 'intermediaria') return '<span class="badge nivel-intermediaria">🟡 Intermediária</span>';
+  if (nivel === 'avancada') return '<span class="badge nivel-avancada">🟢 Avançada</span>';
+  return '<span class="badge nivel-inicial">🔴 Inicial</span>';
+}
+
+function rotuloCategoria(cat) {
+  return CATEGORIA_LABEL[cat] ? CATEGORIA_LABEL[cat].replace(/^[^\s]+\s/, '') : cat;
+}
+
+function renderTabelaInventario() {
+  const busca = document.getElementById('f-busca').value.toLowerCase();
+  const filtroCat = document.getElementById('f-filtro-cat').value;
+  const filtroNivel = document.getElementById('f-filtro-nivel').value;
+  const tbody = document.getElementById('lista-inventario');
+  tbody.innerHTML = '';
+
+  let itens = [...inventarioCache].sort((a,b) => a.nome.localeCompare(b.nome));
+  if (busca) itens = itens.filter(d => d.nome.toLowerCase().includes(busca));
+  if (filtroCat) itens = itens.filter(d => d.categoria === filtroCat);
+  if (filtroNivel) itens = itens.filter(d => (d.nivel || 'inicial') === filtroNivel);
+
+  let alertCount = 0;
+
+  itens.forEach(d => {
+    const tr = document.createElement('tr');
+    let diasVal = null;
+    if (d.validade) diasVal = Math.round((new Date(d.validade) - new Date()) / 86400000);
+    const vencendo = diasVal !== null && diasVal <= 30;
+    const baixo = d.quantidade < d.quantidadeMinima;
+    if (vencendo) { tr.classList.add('expiring'); alertCount++; }
+    else if (baixo) { tr.classList.add('low'); alertCount++; }
+
+    const detalheArma = (d.categoria === 'Armamento' && (d.tipoArma || d.calibre))
+      ? `<br><span class="badge">${d.tipoArma || ''} ${d.calibre || ''}</span>` : '';
+
+    tr.innerHTML = `
+      <td>${d.nome}<br>${rotuloNivel(d.nivel)}<span class="badge">${rotuloCategoria(d.categoria)}</span>${detalheArma}</td>
+      <td>${d.quantidade} ${d.unidade}</td>
+      <td>${d.validade ? d.validade.split('-').reverse().join('/') : '-'}</td>
+      <td><div class="acoes-item"></div></td>
+    `;
+    const acoesDiv = tr.querySelector('.acoes-item');
+
+    const btnEdit = document.createElement('button');
+    btnEdit.className = 'edit';
+    btnEdit.innerText = '✏️';
+    btnEdit.onclick = () => editarItem(d);
+    acoesDiv.appendChild(btnEdit);
+
+    const btnCart = document.createElement('button');
+    btnCart.className = 'cart';
+    btnCart.innerText = '🛒';
+    btnCart.onclick = () => enviarParaCompras(d.nome, d.categoria);
+    acoesDiv.appendChild(btnCart);
+
+    const btnDel = document.createElement('button');
+    btnDel.className = 'danger';
+    btnDel.innerText = 'X';
+    btnDel.onclick = () => excluirItem(d);
+    acoesDiv.appendChild(btnDel);
+
+    tbody.appendChild(tr);
+  });
+
+  const badge = document.getElementById('badge-inv');
+  badge.innerText = alertCount;
+  badge.classList.toggle('hidden', alertCount === 0);
+
+  const tbodyPlanilha = document.getElementById('lista-planilha');
+  tbodyPlanilha.innerHTML = '';
+  [...inventarioCache].sort((a,b) => a.nome.localeCompare(b.nome)).forEach(d => {
+    const trP = document.createElement('tr');
+    trP.innerHTML = `<td>${d.nome}</td><td>${d.quantidade} ${d.unidade}</td>`;
+    tbodyPlanilha.appendChild(trP);
+  });
+}
+
+function carregarInventario() {
+  db.collection('inventario').onSnapshot(snap => {
+    inventarioCache = [];
+    snap.forEach(doc => inventarioCache.push({ id: doc.id, ...doc.data() }));
+    renderTabelaInventario();
+  });
+}
+
+// ===== ABA METAS: toggle de visão =====
+function mudarVisaoMetas(modo) {
+  visaoMetas = modo;
+  document.getElementById('btn-view-nivel').classList.toggle('active', modo === 'nivel');
+  document.getElementById('btn-view-categoria').classList.toggle('active', modo === 'categoria');
+  renderMetas();
+}
+
+function carregarMetas() {
+  db.collection('metas_concluidas').onSnapshot(snap => {
+    metasConcluidas = {};
+    snap.forEach(doc => { metasConcluidas[doc.id] = doc.data().feito; });
+    renderMetas();
+  });
+}
+
+function toggleMeta(chave, valor) {
+  db.collection('metas_concluidas').doc(chave).set({ feito: valor });
+}
+
+function chaveMeta(item, idxGlobal) {
+  return item.nivel + '_' + item.categoria + '_' + idxGlobal;
+}
+
+function renderBlocoMeta(titulo, cssClass, corBarra, itensDoGrupo) {
+  const secao = document.createElement('div');
+  secao.className = 'meta-secao ' + cssClass;
+
+  let concluidos = 0;
+  itensDoGrupo.forEach(([item, chave]) => { if (metasConcluidas[chave]) concluidos++; });
+  const pct = itensDoGrupo.length ? Math.round((concluidos / itensDoGrupo.length) * 100) : 0;
+
+  secao.innerHTML = `
+    <div class="meta-titulo">
+      <h3 style="margin:0;">${titulo}</h3>
+      <span style="font-size:13px; color:#ccc;">${concluidos}/${itensDoGrupo.length}</span>
+    </div>
+    <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%; background:${corBarra};"></div></div>
+  `;
+
+  itensDoGrupo.forEach(([item, chave]) => {
+    const feito = !!metasConcluidas[chave];
+    const row = document.createElement('div');
+    row.className = 'meta-item-row' + (feito ? ' feito' : '');
+    row.innerHTML = `<input type="checkbox" ${feito ? 'checked' : ''}><span>${item.texto}</span>`;
+    row.querySelector('input').onchange = (e) => toggleMeta(chave, e.target.checked);
+    secao.appendChild(row);
+  });
+
+  return secao;
+}
+
+function renderMetas() {
+  const container = document.getElementById('metas-container');
+  container.innerHTML = '';
+
+  // Monta lista com chave única e estável por item (baseada em nivel+categoria+índice dentro do grupo)
+  const itensComChave = METAS_ITENS.map((item, i) => [item, chaveMeta(item, i)]);
+
+  if (visaoMetas === 'nivel') {
+    ['inicial','intermediaria','avancada'].forEach(nivel => {
+      const doGrupo = itensComChave.filter(([item]) => item.nivel === nivel);
+      container.appendChild(renderBlocoMeta(NIVEL_LABEL[nivel], 'meta-' + nivel, NIVEL_COR[nivel], doGrupo));
+    });
+  } else {
+    // Agrupar por categoria, ordenado pela ordem definida em CATEGORIA_LABEL
+    const categoriasPresentes = Object.keys(CATEGORIA_LABEL).filter(cat =>
+      itensComChave.some(([item]) => item.categoria === cat)
+    );
+    categoriasPresentes.forEach(cat => {
+      const doGrupo = itensComChave.filter(([item]) => item.categoria === cat);
+      container.appendChild(renderBlocoMeta(CATEGORIA_LABEL[cat], 'meta-categoria', '#2563eb', doGrupo));
+    });
+  }
+}
+
+let scanner = null;
+function iniciarScanner() {
+  if (scanner) return;
+  scanner = new Html5Qrcode("reader");
+  scanner.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+    codigoLido => { pararScanner(); mostrarEscolhaDestino(codigoLido); }
+  ).catch(err => console.log(err));
+}
+function pararScanner() {
+  if (scanner) { scanner.stop().catch(()=>{}); scanner = null; }
+}
+
+async function mostrarEscolhaDestino(codigo) {
+  const div = document.getElementById('scan-resultado');
+  const existente = inventarioCache.find(i => i.codigoBarras === codigo);
+
+  let nomeSugerido = existente ? existente.nome : '';
+  if (!existente) {
+    try {
+      const resp = await fetch(`https://world.openfoodfacts.org/api/v0/product/${codigo}.json`);
+      const data = await resp.json();
+      if (data.status === 1) nomeSugerido = data.product.product_name || '';
+    } catch(e) {}
+  }
+
+  div.innerHTML = `
+    <div class="scan-item-card">
+      <h3>${existente ? existente.nome : 'Item: ' + (nomeSugerido || 'desconhecido')}</h3>
+      <p style="font-size:12px; color:#999;">Código: ${codigo}</p>
+      <p>O que deseja fazer?</p>
+      <div class="destino-btns">
+        <button onclick="irParaInventario('${codigo}', '${(nomeSugerido||'').replace(/'/g,"\\'")}')">📦 Inventário</button>
+        <button class="cart" onclick="irParaCompras('${codigo}', '${(nomeSugerido||'').replace(/'/g,"\\'")}')">🛒 Lista de Compras</button>
+      </div>
+      <button class="secondary" onclick="document.getElementById('scan-resultado').innerHTML=''; iniciarScanner();">Cancelar / Bipar outro</button>
+    </div>
+  `;
+}
+
+function irParaCompras(codigo, nomeSugerido) {
+  const existente = inventarioCache.find(i => i.codigoBarras === codigo);
+  const nome = existente ? existente.nome : (nomeSugerido || prompt('Nome do item para a lista de compras:'));
+  if (!nome) return;
+  enviarParaCompras(nome, existente ? existente.categoria : null);
+  document.getElementById('scan-resultado').innerHTML = '<p>✅ Adicionado à lista de compras!</p>';
+  setTimeout(() => { document.getElementById('scan-resultado').innerHTML=''; iniciarScanner(); }, 1200);
+}
+
+function irParaInventario(codigo, nomeSugerido) {
+  const div = document.getElementById('scan-resultado');
+  const existente = inventarioCache.find(i => i.codigoBarras === codigo);
+
+  if (existente) {
+    div.innerHTML = `
+      <div class="scan-item-card">
+        <h3>${existente.nome}</h3>
+        <div class="scan-qtd-display" id="scan-qtd-atual">${existente.quantidade} ${existente.unidade}</div>
+        <input type="number" id="scan-delta" value="1" min="0.1" step="0.1" placeholder="Quantidade">
+        <div class="row-btns">
+          <button class="success" onclick="ajustarEstoque('${existente.id}', 1)">➕ Entrada</button>
+          <button class="danger" onclick="ajustarEstoque('${existente.id}', -1)">➖ Saída</button>
+        </div>
+        <button class="secondary" onclick="document.getElementById('scan-resultado').innerHTML=''; iniciarScanner();">Bipar outro item</button>
+      </div>
+    `;
+  } else {
+    div.innerHTML = `
+      <div class="scan-item-card">
+        <h3>Item novo — código ${codigo}</h3>
+        <input id="scan-novo-nome" placeholder="Nome do item" value="${nomeSugerido}">
+        <select id="scan-novo-cat" onchange="toggleCamposArma('scan-novo-cat','campos-arma-scan')">
+          <option value="Agua">Água</option>
+          <option value="Alimento">Alimento</option>
+          <option value="BOB">B.O.B.</option>
+          <option value="BOV">B.O.V.</option>
+          <option value="Armamento">Armamento</option>
+          <option value="Arco">Arco e Flechas</option>
+          <option value="HigieneGeral">Higiene Geral</option>
+          <option value="HigienePessoal">Higiene Pessoal</option>
+        </select>
+        <div id="campos-arma-scan" class="campos-arma hidden">
+          <select id="scan-novo-tipo-arma">
+            <option value="">Tipo de arma</option>
+            <option value="Revolver">Revólver</option>
+            <option value="Pistola">Pistola</option>
+            <option value="Carabina">Carabina</option>
+            <option value="Rifle">Rifle</option>
+            <option value="Fuzil">Fuzil</option>
+          </select>
+          <select id="scan-novo-calibre">
+            <option value="">Calibre</option>
+            <option value=".22 LR">.22 LR</option>
+            <option value=".380 ACP">.380 ACP</option>
+            <option value="9mm Luger">9mm Luger</option>
+            <option value=".38 SPL">.38 SPL</option>
+            <option value=".357 Magnum">.357 Magnum</option>
+            <option value=".40 S&W">.40 S&W</option>
+            <option value=".45 ACP">.45 ACP</option>
+            <option value=".223 Rem / 5.56x45">.223 Rem / 5.56x45</option>
+            <option value=".308 Win / 7.62x51">.308 Win / 7.62x51</option>
+            <option value="12 Gauge">12 Gauge</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <select id="scan-novo-nivel">
+          <option value="inicial">🔴 Inicial</option>
+          <option value="intermediaria">🟡 Intermediária</option>
+          <option value="avancada">🟢 Avançada</option>
+        </select>
+        <input id="scan-novo-qtd" type="number" step="0.1" value="1" placeholder="Quantidade inicial">
+        <input id="scan-novo-unid" placeholder="Unidade (un, kg, L)" value="un">
+        <input id="scan-novo-min" type="number" step="0.1" value="1" placeholder="Quantidade mínima">
+        <button onclick="cadastrarViaBip('${codigo}')">Cadastrar e adicionar ao inventário</button>
+        <button class="secondary" onclick="document.getElementById('scan-resultado').innerHTML=''; iniciarScanner();">Bipar outro item</button>
+      </div>
+    `;
+  }
+}
+
+function cadastrarViaBip(codigo) {
+  const categoria = document.getElementById('scan-novo-cat').value;
+  const item = {
+    nome: document.getElementById('scan-novo-nome').value,
+    codigoBarras: codigo,
+    categoria: categoria,
+    tipoArma: categoria === 'Armamento' ? (document.getElementById('scan-novo-tipo-arma').value || null) : null,
+    calibre: categoria === 'Armamento' ? (document.getElementById('scan-novo-calibre').value || null) : null,
+    nivel: document.getElementById('scan-novo-nivel').value,
+    quantidade: parseFloat(document.getElementById('scan-novo-qtd').value) || 1,
+    unidade: document.getElementById('scan-novo-unid').value || 'un',
+    quantidadeMinima: parseFloat(document.getElementById('scan-novo-min').value) || 1,
+    validade: null,
+    atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  if (!item.nome) { alert('Digite um nome para o item'); return; }
+  db.collection('inventario').add(item);
+  document.getElementById('scan-resultado').innerHTML = '<p>✅ Item cadastrado!</p>';
+  setTimeout(() => { document.getElementById('scan-resultado').innerHTML=''; iniciarScanner(); }, 1200);
+}
+
+async function ajustarEstoque(itemId, direcao) {
+  const delta = parseFloat(document.getElementById('scan-delta').value) || 1;
+  const ref = db.collection('inventario').doc(itemId);
+  const doc = await ref.get();
+  const d = doc.data();
+  let novaQtd = d.quantidade + (delta * direcao);
+  if (novaQtd < 0) novaQtd = 0;
+
+  await ref.update({ quantidade: novaQtd, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp() });
+
+  if (direcao === -1 && novaQtd < d.quantidadeMinima) {
+    const jaNaLista = await db.collection('lista_compras')
+      .where('nome', '==', d.nome).where('comprado', '==', false).get();
+    if (jaNaLista.empty) {
+      db.collection('lista_compras').add({ nome: d.nome, categoria: d.categoria, comprado: false, origemAutomatica: true });
+    }
+  }
+  document.getElementById('scan-qtd-atual').innerText = novaQtd + ' ' + d.unidade;
+}
+
+function adicionarCompra() {
+  const texto = document.getElementById('f-shop').value;
+  const categoria = document.getElementById('f-shop-cat').value;
+  if (!texto) return;
+  db.collection('lista_compras').add({ nome: texto, categoria: categoria || null, comprado: false });
+  document.getElementById('f-shop').value = '';
+}
+
+function excluirCompra(doc) {
+  const d = doc.data();
+  if (!confirm('Excluir "' + d.nome + '" da lista de compras?')) return;
+  db.collection('lista_compras').doc(doc.id).delete();
+  mostrarToast('Removido: ' + d.nome, () => {
+    db.collection('lista_compras').add({ nome: d.nome, categoria: d.categoria || null, comprado: d.comprado, origemAutomatica: d.origemAutomatica || false });
+  });
+}
+
+function carregarCompras() {
+  db.collection('lista_compras').onSnapshot(snap => {
+    comprasCache = [];
+    const div = document.getElementById('lista-compras');
+    div.innerHTML = '';
+    let pendentes = 0;
+
+    snap.forEach(doc => {
+      const d = doc.data();
+      comprasCache.push(d);
+      if (!d.comprado) pendentes++;
+
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.gap = '8px';
+      row.style.padding = '6px 0';
+      row.innerHTML = `
+        <input type="checkbox" ${d.comprado ? 'checked' : ''} style="width:20px;">
+        <span style="flex:1; ${d.comprado ? 'text-decoration:line-through;color:#777;' : ''}">${d.nome}
+          ${d.categoria ? '<span class="badge">'+rotuloCategoria(d.categoria)+'</span>' : ''}
+          ${d.origemAutomatica ? ' <span class="badge">auto</span>' : ''}
+        </span>
+      `;
+      row.querySelector('input').onchange = (e) => {
+        db.collection('lista_compras').doc(doc.id).update({ comprado: e.target.checked });
+      };
+      const btnDel = document.createElement('button');
+      btnDel.innerText = 'X';
+      btnDel.className = 'danger';
+      btnDel.style.width = 'auto';
+      btnDel.onclick = () => excluirCompra(doc);
+      row.appendChild(btnDel);
+      div.appendChild(row);
+    });
+
+    const badge = document.getElementById('badge-shop');
+    badge.innerText = pendentes;
+    badge.classList.toggle('hidden', pendentes === 0);
+  });
+}
+
+function puxarFaltantes() {
+  db.collection('inventario').get().then(snap => {
+    snap.forEach(doc => {
+      const d = doc.data();
+      if (d.quantidade < d.quantidadeMinima) {
+        db.collection('lista_compras').add({ nome: d.nome, categoria: d.categoria, comprado: false });
+      }
+    });
+  });
+}
+
+function nomeArquivoComData(base) {
+  const hoje = new Date();
+  const data = hoje.toISOString().split('T')[0];
+  return `${base}-${data}.pdf`;
+}
+
+function baixarPDFInventario() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const dataHoje = new Date().toLocaleDateString('pt-BR');
+
+  doc.setFontSize(16);
+  doc.text('Inventário - Família Miranda', 14, 15);
+  doc.setFontSize(10);
+  doc.text('Gerado em: ' + dataHoje, 14, 22);
+
+  let y = 32;
+  doc.setFontSize(9);
+  doc.text('Item', 14, y);
+  doc.text('Categoria', 75, y);
+  doc.text('Nível', 115, y);
+  doc.text('Qtd', 150, y);
+  doc.text('Validade', 172, y);
+  y += 4;
+  doc.line(14, y, 196, y);
+  y += 6;
+
+  const itensOrdenados = [...inventarioCache].sort((a,b) => a.nome.localeCompare(b.nome));
+  const nivelTexto = { inicial: 'Inicial', intermediaria: 'Intermediária', avancada: 'Avançada' };
+
+  itensOrdenados.forEach(d => {
+    if (y > 280) { doc.addPage(); y = 20; }
+    doc.setFontSize(8);
+    doc.text(String(d.nome).substring(0, 28), 14, y);
+    doc.text(rotuloCategoria(d.categoria).substring(0, 18), 75, y);
+    doc.text(nivelTexto[d.nivel] || 'Inicial', 115, y);
+    doc.text(`${d.quantidade} ${d.unidade}`, 150, y);
+    doc.text(d.validade ? d.validade.split('-').reverse().join('/') : '-', 172, y);
+    y += 7;
+  });
+
+  doc.save(nomeArquivoComData('inventario-familia-miranda'));
+}
+
+function baixarPDFCompras() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const dataHoje = new Date().toLocaleDateString('pt-BR');
+
+  doc.setFontSize(16);
+  doc.text('Lista de Compras - Família Miranda', 14, 15);
+  doc.setFontSize(10);
+  doc.text('Gerado em: ' + dataHoje, 14, 22);
+
+  let y = 32;
+  doc.setFontSize(10);
+  doc.text('Item', 14, y);
+  doc.text('Categoria', 110, y);
+  doc.text('Status', 160, y);
+  y += 4;
+  doc.line(14, y, 196, y);
+  y += 6;
+
+  comprasCache.forEach(d => {
+    if (y > 280) { doc.addPage(); y = 20; }
+    doc.setFontSize(9);
+    doc.text(String(d.nome).substring(0, 40), 14, y);
+    doc.text(d.categoria ? rotuloCategoria(d.categoria) : '-', 110, y);
+    doc.text(d.comprado ? 'Comprado' : 'Pendente', 160, y);
+    y += 7;
+  });
+
+  doc.save(nomeArquivoComData('lista-compras-familia-miranda'));
+}
+</script>
+</body>
+</html>
